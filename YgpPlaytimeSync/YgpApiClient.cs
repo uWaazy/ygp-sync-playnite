@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -2449,7 +2449,6 @@ return out;";
 
             if (result.R.Ok)
             {
-                _editFailures = 0;
                 _logger.Info($"[YGP] Jogo {gameId} atualizado para {minutes}m (site tinha {(existing.HasValue ? existing.Value.ToString("0") : "?")}m) via {updateProc}.");
                 await Task.Delay(250);
                 if (reopen) _logger.Info($"[YGP] Jogo {gameId}: voltou a jogar, data de conclusão removida no site.");
@@ -2531,8 +2530,6 @@ return out;";
             }
             return null;
         }
-
-        private int _editFailures;
 
         /// <summary>
         /// Jogo que o site já tem: lê o estado atual (sync.getGameEditOverlay), troca só horas/datas e grava
@@ -2634,7 +2631,6 @@ return out;";
 
             if (result.R.Ok)
             {
-                _editFailures = 0;
                 _logger.Info($"[YGP] Jogo {gameId} atualizado para {minutes}m via {updateProc}.");
                 return new YgpSyncResult { Success = true, YgpGameId = gameId, TotalPlaytimeMinutes = minutes };
             }

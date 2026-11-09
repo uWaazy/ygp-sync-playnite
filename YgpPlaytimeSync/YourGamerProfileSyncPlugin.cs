@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -1535,7 +1535,7 @@ namespace YgpPlaytimeSync
 
             if (_isInitialized && _settings.AutoCompleteEnabled)
             {
-                Task.Run(() =>
+                _ = Task.Run(() =>
                 {
                     var queued = ApplyAutoCompletion();
                     if (queued > 0) NotifyUser(L.T("notify.autoComplete", queued, _settings.AutoCompleteDays));

@@ -9,6 +9,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\YgpPlaytimeSync\YgpPlaytimeSync.csproj" />
+    <Reference Include="Playnite.SDK">
+      <HintPath Condition="'$(PlayniteSdkPath)' != ''">$(PlayniteSdkPath)</HintPath>
+      <HintPath Condition="'$(PlayniteSdkPath)' == '' And Exists('$(LOCALAPPDATA)\Playnite\Playnite.SDK.dll')">$(LOCALAPPDATA)\Playnite\Playnite.SDK.dll</HintPath>
+      <HintPath Condition="'$(PlayniteSdkPath)' == '' And !Exists('$(LOCALAPPDATA)\Playnite\Playnite.SDK.dll')">..\Playnite.SDK.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
