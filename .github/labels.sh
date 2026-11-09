@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run once with GitHub CLI logged in: gh auth login
-R=uWaazy/ygp-playtime-sync
+R=uWaazy/ygp-sync-playnite
 mk(){ gh label create "$1" -R $R -c "$2" -d "$3" --force; }
 mk bug d73a4a "Something is broken"
 mk enhancement a2eeef "New feature or request"

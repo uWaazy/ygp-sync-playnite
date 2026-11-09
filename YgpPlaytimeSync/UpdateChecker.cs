@@ -19,7 +19,7 @@ namespace YgpPlaytimeSync
     /// </summary>
     public static class UpdateChecker
     {
-        private const string ReleasesApi = "https://api.github.com/repos/uWaazy/ygp-playtime-sync/releases?per_page=10";
+        private const string ReleasesApi = "https://api.github.com/repos/uWaazy/ygp-sync-playnite/releases?per_page=10";
 
         /// <summary>Retorna a versão mais nova que a atual, ou null (sem atualização, sem internet ou erro).</summary>
         public static async Task<UpdateInfo> CheckAsync(Version current)

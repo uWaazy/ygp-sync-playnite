@@ -39,7 +39,7 @@ English · [Português (Brasil)](README.pt-BR.md) · [Español](README.es.md)
 
 ## Installation
 
-1. Download the latest `.pext` from the [**Releases**](https://github.com/uWaazy/ygp-playtime-sync/releases) page.
+1. Download the latest `.pext` from the [**Releases**](https://github.com/uWaazy/ygp-sync-playnite/releases) page.
 2. Close Playnite, then double-click the `.pext` file (or use *Add-ons → Install from file*). Start Playnite again.
 3. Open **Add-ons → Extensions settings → Generic → Your Gamer Profile Sync**.
 4. Click **Link account (sign in)** and sign in to YGP in the window that opens. If Google blocks sign-in in the embedded browser, use **Link by pasting a cookie (alternative)** and follow the on-screen steps.
@@ -104,7 +104,7 @@ What stays on your PC (in Playnite's `ExtensionsData` folder for this plugin): t
 
 ## Reporting problems
 
-Open an [issue](https://github.com/uWaazy/ygp-playtime-sync/issues) and include:
+Open an [issue](https://github.com/uWaazy/ygp-sync-playnite/issues) and include:
 
 1. Your Playnite and plugin versions.
 2. What you did and what you expected.

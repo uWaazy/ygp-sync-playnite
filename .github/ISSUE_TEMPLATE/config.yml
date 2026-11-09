@@ -1,10 +1,10 @@
 blank_issues_enabled: false
 contact_links:
   - name: Troubleshooting guide
-    url: https://github.com/uWaazy/ygp-playtime-sync/blob/main/docs/troubleshooting.md
+    url: https://github.com/uWaazy/ygp-sync-playnite/blob/main/docs/troubleshooting.md
     about: Common problems and fixes. Please check before opening an issue.
   - name: Privacy and security
-    url: https://github.com/uWaazy/ygp-playtime-sync/blob/main/docs/privacy.md
+    url: https://github.com/uWaazy/ygp-sync-playnite/blob/main/docs/privacy.md
     about: What the plugin sends and stores.
   - name: Support the project
     url: https://ko-fi.com/uWaazy

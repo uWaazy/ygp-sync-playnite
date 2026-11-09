@@ -5,7 +5,7 @@ Packages:
   - Version: 0.5.4
     RequiredApiVersion: 5.0.0
     ReleaseDate: 2026-11-04
-    PackageUrl: https://github.com/uWaazy/ygp-playtime-sync/releases/download/v0.5.4/ygp-playtime-sync-v0.5.4.pext
+    PackageUrl: https://github.com/uWaazy/ygp-sync-playnite/releases/download/v0.5.4/ygp-playtime-sync-v0.5.4.pext
     Changelog:
       - First public beta release.
       - Added Creator Profile card and language selection.

@@ -423,6 +423,13 @@ namespace YgpPlaytimeSync
                 // (principalmente durante os redirecionamentos de Google/Discord). Um temporizador na thread da
                 // interface faz a verificação com segurança.
                 var closing = false;
+
+                // Valores dos cookies de sessão que já existiam: se algum mudar, houve um login novo (mesmo que o site fique numa página de login).
+                var initialSession = new Dictionary<string, string>();
+                foreach (var c in SafeGetCookies(view))
+                    if (IsSiteCookie(c) && c.Name != null && c.Name.IndexOf("session", StringComparison.OrdinalIgnoreCase) >= 0)
+                        initialSession[c.Name] = c.Value ?? "";
+
                 var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2000) };
                 timer.Tick += (s, e) =>
                 {
@@ -431,9 +438,15 @@ namespace YgpPlaytimeSync
                     try
                     {
                         var address = view.GetCurrentAddress() ?? "";
-                        if (!IsSiteAddress(address) || IsAuthPage(address)) return;
+                        var current = SafeGetCookies(view);
 
-                        if (HasSessionCookie(SafeGetCookies(view)))
+                        bool newSession = current.Any(c => IsSiteCookie(c) && c.Name != null
+                            && c.Name.IndexOf("session", StringComparison.OrdinalIgnoreCase) >= 0 && !string.IsNullOrEmpty(c.Value)
+                            && (!initialSession.ContainsKey(c.Name) || initialSession[c.Name] != c.Value));
+
+                        if (!newSession && (!IsSiteAddress(address) || IsAuthPage(address))) return;
+
+                        if (HasSessionCookie(current))
                         {
                             closing = true;
                             timer.Stop();
@@ -2252,17 +2265,6 @@ return out;";
             payload["isBacklog"] = b;
         }
 
-        /// <summary>True se a entrada do site já tem algum status marcado (completado, finalizado, jogando, abandonado, pausado).</summary>
-        private static bool SiteHasStatus(JObject pick)
-        {
-            foreach (var key in new[] { "isCompleted", "isFinished", "isPlaying", "isAbandoned", "isPaused" })
-            {
-                var t = pick[key];
-                if (t != null && t.Type == JTokenType.Boolean && (bool)t) return true;
-            }
-            return false;
-        }
-
         private static bool Flag(JObject o, string key)
         {
             var t = o[key];
@@ -2340,14 +2342,6 @@ return out;";
             bool force = dates != null && dates.Force;
             string newStatus = dates != null ? dates.Status : null;
             double? newRating = dates != null ? dates.Rating : null;
-
-            // Modo "só preencher": não sobrescreve status/nota que o site já tem.
-            bool statusKept = false, ratingKept = false;
-            if (dates != null && dates.FillOnly)
-            {
-                if (!string.IsNullOrEmpty(newStatus) && SiteHasStatus(pick)) { newStatus = null; statusKept = true; }
-                if (newRating.HasValue && !IsNullToken(pick["gameRating"])) { newRating = null; ratingKept = true; }
-            }
             bool statusWinsOverReopen = newStatus == "beaten" || newStatus == "completed";
 
             // "Voltou a jogar": o site já tem data de conclusão e as horas subiram -> a conclusão deixa de valer.
@@ -2363,8 +2357,6 @@ return out;";
                     AlreadyOnProfile = true,
                     YgpGameId = gameId,
                     TotalPlaytimeMinutes = minutes,
-                    StatusKeptBySite = statusKept,
-                    RatingKeptBySite = ratingKept,
                     ErrorMessage = "[EXISTS] " + L.T("err.existsHours", existing.Value, minutes)
                 };
             }
@@ -2468,8 +2460,6 @@ return out;";
                     TotalPlaytimeMinutes = minutes,
                     StatusApplied = !string.IsNullOrEmpty(newStatus) && !statusDropped,
                     RatingApplied = newRating.HasValue && !ratingDropped,
-                    StatusKeptBySite = statusKept,
-                    RatingKeptBySite = ratingKept,
                     SiteMinutesBefore = existing.HasValue ? (int?)Math.Round(existing.Value) : null
                 };
             }
@@ -2989,10 +2979,6 @@ return out;";
         public bool StatusApplied { get; set; }
         /// <summary>A avaliação em estrelas foi gravada no site nesta sincronização.</summary>
         public bool RatingApplied { get; set; }
-        /// <summary>Modo "só preencher": o site já tinha status, então o do Playnite não foi enviado (valor do site preservado).</summary>
-        public bool StatusKeptBySite { get; set; }
-        /// <summary>Modo "só preencher": o site já tinha nota, então a do Playnite não foi enviada (valor do site preservado).</summary>
-        public bool RatingKeptBySite { get; set; }
         /// <summary>Minutos que o site tinha antes da atualização (para mostrar quanto subiu).</summary>
         public int? SiteMinutesBefore { get; set; }
         public int TotalPlaytimeMinutes { get; set; }
