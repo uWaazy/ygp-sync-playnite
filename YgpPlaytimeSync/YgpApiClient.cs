@@ -1836,9 +1836,18 @@ return out;";
             if (!relaxed) return 0;
 
             // jogo com subtítulo/expansão ("Jogo: Expansão") e o site só tem o jogo base
-            var baseTitle = Regex.Split(Regex.Replace(wanted ?? "", @"\(.*?\)|\[.*?\]", " "), @":|\s[-–—]\s")[0];
+            // Só vale quando o que sobra é edição/DLC/expansão. Subtítulo com nome próprio
+            // ("Zelda: Ocarina of Time") é OUTRO jogo e não pode casar com o jogo base.
+            var parts = Regex.Split(Regex.Replace(wanted ?? "", @"\(.*?\)|\[.*?\]", " "), @":|\s[-–—]\s");
+            var baseTitle = parts[0];
             var bk = CompareKey(baseTitle);
-            if (bk.Length >= 4 && bk == fk) return 55;
+            if (bk.Length >= 4 && bk == fk)
+            {
+                var tail = string.Join(" ", parts.Skip(1));
+                var tailTokens = NormalizeTitle(tail).Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                bool onlyEditionWords = tailTokens.Length > 0 && tailTokens.All(t => NoiseTokens.Contains(t) || BadExtras.Contains(t) || IsNumberToken(t));
+                if (onlyEditionWords) return 55;
+            }
 
             // quase iguais: mesmos números e pelo menos 80% das palavras em comum
             var wset = new HashSet<string>(wt);
