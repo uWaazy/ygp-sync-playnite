@@ -77,9 +77,13 @@ namespace YgpPlaytimeSync
             return GetMinutes(key) >= totalSeconds / 60;
         }
 
+        /// <summary>Disparado depois que o tempo de um jogo é registrado (o tema usa para atualizar a tela).</summary>
+        public event Action<string> Recorded;
+
         public void Record(string key, int totalSeconds)
         {
             var minutes = totalSeconds / 60;
+            var changed = false;
             lock (_lock)
             {
                 int old;
@@ -87,7 +91,13 @@ namespace YgpPlaytimeSync
                 {
                     _minutes[key] = minutes;
                     SaveUnlocked();
+                    changed = true;
                 }
+            }
+            if (changed)
+            {
+                var handler = Recorded;
+                if (handler != null) { try { handler(key); } catch { } }
             }
         }
 

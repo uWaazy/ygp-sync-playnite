@@ -423,13 +423,6 @@ namespace YgpPlaytimeSync
                 // (principalmente durante os redirecionamentos de Google/Discord). Um temporizador na thread da
                 // interface faz a verificação com segurança.
                 var closing = false;
-
-                // Valores dos cookies de sessão que já existiam: se algum mudar, houve um login novo (mesmo que o site fique numa página de login).
-                var initialSession = new Dictionary<string, string>();
-                foreach (var c in SafeGetCookies(view))
-                    if (IsSiteCookie(c) && c.Name != null && c.Name.IndexOf("session", StringComparison.OrdinalIgnoreCase) >= 0)
-                        initialSession[c.Name] = c.Value ?? "";
-
                 var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2000) };
                 timer.Tick += (s, e) =>
                 {
@@ -438,15 +431,9 @@ namespace YgpPlaytimeSync
                     try
                     {
                         var address = view.GetCurrentAddress() ?? "";
-                        var current = SafeGetCookies(view);
+                        if (!IsSiteAddress(address) || IsAuthPage(address)) return;
 
-                        bool newSession = current.Any(c => IsSiteCookie(c) && c.Name != null
-                            && c.Name.IndexOf("session", StringComparison.OrdinalIgnoreCase) >= 0 && !string.IsNullOrEmpty(c.Value)
-                            && (!initialSession.ContainsKey(c.Name) || initialSession[c.Name] != c.Value));
-
-                        if (!newSession && (!IsSiteAddress(address) || IsAuthPage(address))) return;
-
-                        if (HasSessionCookie(current))
+                        if (HasSessionCookie(SafeGetCookies(view)))
                         {
                             closing = true;
                             timer.Stop();
@@ -1836,9 +1823,18 @@ return out;";
             if (!relaxed) return 0;
 
             // jogo com subtítulo/expansão ("Jogo: Expansão") e o site só tem o jogo base
-            var baseTitle = Regex.Split(Regex.Replace(wanted ?? "", @"\(.*?\)|\[.*?\]", " "), @":|\s[-–—]\s")[0];
+            // SÓ vale quando o que sobra é edição/DLC/expansão. Um subtítulo com nome próprio
+            // ("Zelda: Ocarina of Time") é OUTRO jogo: casar com o jogo base de 1986 seria errado.
+            var parts = Regex.Split(Regex.Replace(wanted ?? "", @"\(.*?\)|\[.*?\]", " "), @":|\s[-–—]\s");
+            var baseTitle = parts[0];
             var bk = CompareKey(baseTitle);
-            if (bk.Length >= 4 && bk == fk) return 55;
+            if (bk.Length >= 4 && bk == fk)
+            {
+                var tail = string.Join(" ", parts.Skip(1));
+                var tailTokens = NormalizeTitle(tail).Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                bool onlyEditionWords = tailTokens.Length > 0 && tailTokens.All(t => NoiseTokens.Contains(t) || BadExtras.Contains(t) || IsNumberToken(t));
+                if (onlyEditionWords) return 55;
+            }
 
             // quase iguais: mesmos números e pelo menos 80% das palavras em comum
             var wset = new HashSet<string>(wt);
@@ -2033,9 +2029,6 @@ return out;";
                 { "startedAt", startedToken }
             };
 
-            if (dates != null && !string.IsNullOrEmpty(dates.Status)) ApplyStatusToPayload(payload, dates.Status);
-            if (dates != null && dates.Rating.HasValue) payload["rating"] = dates.Rating.Value;
-
             var attempts = new List<string>();
             var tried = new HashSet<string>();
             var candidates = new List<string> { "unverified.addGame" };
@@ -2090,7 +2083,7 @@ return out;";
                         AppendDiagnostic($"ROTA DE EDIÇÃO em uso: {proc} {current.ToString(Formatting.None)}");
                     }
 
-                    return new YgpSyncResult { Success = true, YgpGameId = gameId, TotalPlaytimeMinutes = minutes, StatusApplied = dates != null && !string.IsNullOrEmpty(dates.Status), RatingApplied = dates != null && dates.Rating.HasValue };
+                    return new YgpSyncResult { Success = true, YgpGameId = gameId, TotalPlaytimeMinutes = minutes };
                 }
 
                 // Só falha de login de verdade interrompe; "sem permissão" numa rota experimental apenas descarta a rota.
@@ -2134,17 +2127,15 @@ return out;";
 
             if (alreadyOnProfile)
             {
-                // O site já tem esse jogo nessa plataforma, mas a atualização das horas não foi aceita.
-                // Isso é uma FALHA (volta para a fila e aparece no erro), nunca "sincronizado": antes o plugin
-                // marcava como enviado e as horas do site ficavam paradas.
+                // O site já tem esse jogo nessa plataforma (provavelmente sincronizado pelo próprio site).
                 return new YgpSyncResult
                 {
-                    Success = false,
+                    Success = true,
                     AlreadyOnProfile = true,
                     UpdateFailed = true,
                     YgpGameId = gameId,
                     TotalPlaytimeMinutes = minutes,
-                    ErrorMessage = L.T("err.existsRefused") + (attempts.Count > 0 ? " " + Trim(string.Join(" || ", attempts), 400) : "")
+                    ErrorMessage = "[EXISTS] " + L.T("err.existsRefused")
                 };
             }
 
@@ -2218,51 +2209,6 @@ return out;";
         private static JToken IsoOrNull(DateTime? d)
         {
             return d.HasValue ? (JToken)new JValue(DateToIso(d.Value)) : JValue.CreateNull();
-        }
-
-        private static DateTime? ParseIso(JToken t)
-        {
-            if (IsNullToken(t)) return null;
-            if (t.Type == JTokenType.Date) return t.Value<DateTime>().ToUniversalTime();
-            DateTime d;
-            if (DateTime.TryParse((string)t, CultureInfo.InvariantCulture,
-                DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out d)) return d;
-            return null;
-        }
-
-        /// <summary>O site exige startedAt &lt;= completedAt. Se estiver invertido, o início passa a ser a conclusão.</summary>
-        private static void FixDateOrder(ref JToken started, ref JToken completed)
-        {
-            var s = ParseIso(started);
-            var c = ParseIso(completed);
-            if (s.HasValue && c.HasValue && s.Value > c.Value) started = completed.DeepClone();
-        }
-
-        /// <summary>Converte o status (playing, beaten, completed, abandoned, onhold, backlog) nos botões de status do YGP.</summary>
-        private static void StatusFlags(string status, out bool completed, out bool finished, out bool playing, out bool abandoned, out bool paused, out bool backlog)
-        {
-            completed = finished = playing = abandoned = paused = backlog = false;
-            switch ((status ?? "").ToLowerInvariant())
-            {
-                case "beaten": finished = true; break;
-                case "completed": finished = true; completed = true; break;
-                case "abandoned": abandoned = true; break;
-                case "onhold": paused = true; break;
-                case "backlog": backlog = true; break;
-                default: playing = true; break;
-            }
-        }
-
-        private static void ApplyStatusToPayload(JObject payload, string status)
-        {
-            bool c, f, p, a, h, b;
-            StatusFlags(status, out c, out f, out p, out a, out h, out b);
-            payload["isCompleted"] = c;
-            payload["isFinished"] = f;
-            payload["isPlaying"] = p;
-            payload["isAbandoned"] = a;
-            payload["isPaused"] = h;
-            payload["isBacklog"] = b;
         }
 
         private static bool Flag(JObject o, string key)
@@ -2340,16 +2286,7 @@ return out;";
             else if (synced != null && (synced.Type == JTokenType.Integer || synced.Type == JTokenType.Float)) existing = (double)synced;
 
             bool force = dates != null && dates.Force;
-            string newStatus = dates != null ? dates.Status : null;
-            double? newRating = dates != null ? dates.Rating : null;
-            bool statusWinsOverReopen = newStatus == "beaten" || newStatus == "completed";
-
-            // "Voltou a jogar": o site já tem data de conclusão e as horas subiram -> a conclusão deixa de valer.
-            bool reopen = dates != null && dates.ReopenOnReplay && !statusWinsOverReopen
-                          && existing.HasValue && minutes > existing.Value
-                          && !IsNullToken(pick["completedAt"]) && !dates.Completed.HasValue;
-
-            if (!force && string.IsNullOrEmpty(newStatus) && !newRating.HasValue && existing.HasValue && existing.Value >= minutes)
+            if (!force && existing.HasValue && existing.Value >= minutes)
             {
                 return new YgpSyncResult
                 {
@@ -2361,30 +2298,19 @@ return out;";
                 };
             }
 
-            // Só mudou o status (horas iguais): nunca reduz as horas que o site já tem.
-            int sendMinutes = minutes;
-            if (!force && existing.HasValue && existing.Value > minutes) sendMinutes = (int)Math.Round(existing.Value);
-
             // Datas: mantém as do site; só preenche o início se estiver vazio e a conclusão se o usuário pediu.
             JToken started = IsNullToken(pick["startedAt"]) ? IsoOrNull(dates != null ? dates.Start : null) : pick["startedAt"].DeepClone();
             JToken completed;
             if (dates != null && dates.Completed.HasValue) completed = IsoOrNull(dates.Completed);
             else completed = IsNullToken(pick["completedAt"]) ? (JToken)JValue.CreateNull() : pick["completedAt"].DeepClone();
 
-            if (reopen) completed = JValue.CreateNull();
-
             JToken rating = IsNullToken(pick["gameRating"]) ? (JToken)JValue.CreateNull() : pick["gameRating"].DeepClone();
-            if (newRating.HasValue) rating = new JValue(newRating.Value);
-
-            // O site exige início <= conclusão. Se a ordem estiver invertida (ex.: início = dia em que o jogo foi
-            // adicionado e conclusão = histórico antigo), corrige antes de enviar em vez de levar um erro 400.
-            FixDateOrder(ref started, ref completed);
 
             var payload = new JObject
             {
                 { "platform", (string)pick["platform"] ?? "UNVERIFIED" },
                 { "userGameId", userGameId },
-                { "customPlaytimeMinutes", sendMinutes },
+                { "customPlaytimeMinutes", minutes },
                 { "isCompleted", Flag(pick, "isCompleted") },
                 { "isFinished", Flag(pick, "isFinished") },
                 { "isPlaying", Flag(pick, "isPlaying") },
@@ -2399,66 +2325,22 @@ return out;";
                 { "platformPlayed", (string)pick["subPlatform"] ?? targetPlatform }
             };
 
-            if (!string.IsNullOrEmpty(newStatus)) ApplyStatusToPayload(payload, newStatus);
-            else if (reopen) ApplyStatusToPayload(payload, "playing");
-
             var result = await TrpcAdaptiveAsync(updateProc, payload, true, gameId, targetPlatform, minutes, 3);
             AppendDiagnostic($"EDIÇÃO {updateProc} {Trim(result.Input.ToString(Formatting.None), 700)} -> HTTP {result.R.Status} {result.R.Code}: {Trim(result.R.Raw, 600)}");
-
-            // O site recusou o status enviado: as horas valem mais. Tenta de novo mantendo o status que o site já tinha.
-            bool statusDropped = false;
-            bool ratingDropped = false;
-            if (!result.R.Ok && result.R.Code == "BAD_REQUEST" && (!string.IsNullOrEmpty(newStatus) || newRating.HasValue))
-            {
-                var keep = (JObject)payload.DeepClone();
-                keep["isCompleted"] = Flag(pick, "isCompleted");
-                keep["isFinished"] = Flag(pick, "isFinished");
-                keep["isPlaying"] = Flag(pick, "isPlaying");
-                keep["isAbandoned"] = Flag(pick, "isAbandoned");
-                keep["isPaused"] = Flag(pick, "isPaused");
-                keep["isBacklog"] = Flag(pick, "isBacklog");
-                keep["rating"] = IsNullToken(pick["gameRating"]) ? (JToken)JValue.CreateNull() : pick["gameRating"].DeepClone();
-                result = await TrpcAdaptiveAsync(updateProc, keep, true, gameId, targetPlatform, minutes, 3);
-                AppendDiagnostic($"EDIÇÃO (2ª tentativa, sem mudar o status) {updateProc} {Trim(result.Input.ToString(Formatting.None), 700)} -> HTTP {result.R.Status} {result.R.Code}: {Trim(result.R.Raw, 600)}");
-                statusDropped = true;
-                ratingDropped = true;
-                payload = keep;
-            }
-
-            // Erro de datas: as horas são o que importa. Tenta de novo só com as datas que o próprio site já tinha
-            // (ou sem datas), para nunca deixar de atualizar o tempo por causa de uma data.
-            if (!result.R.Ok && result.R.Code == "BAD_REQUEST" &&
-                ((result.R.Message ?? "").IndexOf("startedAt", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                 (result.R.Message ?? "").IndexOf("completedAt", StringComparison.OrdinalIgnoreCase) >= 0))
-            {
-                JToken siteStarted = IsNullToken(pick["startedAt"]) ? (JToken)JValue.CreateNull() : pick["startedAt"].DeepClone();
-                JToken siteCompleted = IsNullToken(pick["completedAt"]) ? (JToken)JValue.CreateNull() : pick["completedAt"].DeepClone();
-                FixDateOrder(ref siteStarted, ref siteCompleted);
-
-                var retry = (JObject)payload.DeepClone();
-                retry["startedAt"] = siteStarted;
-                retry["completedAt"] = siteCompleted;
-                retry["ignoreDates"] = IsNullToken(siteStarted) && IsNullToken(siteCompleted);
-
-                result = await TrpcAdaptiveAsync(updateProc, retry, true, gameId, targetPlatform, minutes, 3);
-                AppendDiagnostic($"EDIÇÃO (2ª tentativa, datas do site) {updateProc} {Trim(result.Input.ToString(Formatting.None), 700)} -> HTTP {result.R.Status} {result.R.Code}: {Trim(result.R.Raw, 600)}");
-            }
 
             if (result.R.Status == 401 || result.R.Code == "UNAUTHORIZED") return AuthFailure();
             if (result.R.IsBlocked) return new YgpSyncResult { Success = false, ErrorMessage = result.R.Message };
 
             if (result.R.Ok)
             {
+                _editFailures = 0;
                 _logger.Info($"[YGP] Jogo {gameId} atualizado para {minutes}m (site tinha {(existing.HasValue ? existing.Value.ToString("0") : "?")}m) via {updateProc}.");
                 await Task.Delay(250);
-                if (reopen) _logger.Info($"[YGP] Jogo {gameId}: voltou a jogar, data de conclusão removida no site.");
                 return new YgpSyncResult
                 {
                     Success = true,
                     YgpGameId = gameId,
                     TotalPlaytimeMinutes = minutes,
-                    StatusApplied = !string.IsNullOrEmpty(newStatus) && !statusDropped,
-                    RatingApplied = newRating.HasValue && !ratingDropped,
                     SiteMinutesBefore = existing.HasValue ? (int?)Math.Round(existing.Value) : null
                 };
             }
@@ -2466,12 +2348,10 @@ return out;";
             attempts.Add(updateProc + ": " + Trim(result.R.Message ?? result.R.Raw, 220));
             _logger.Warn($"[YGP] {updateProc} recusado (HTTP {result.R.Status}, {result.R.Code}): {Trim(result.R.Raw, 500)}");
 
-            // Erro de validação (400) ou limite (429) é problema daquele jogo/momento, não da rota: nunca desativa a
-            // rota por isso (foi o que impedia TODOS os jogos de atualizar até reiniciar o Playnite).
-            // Só desativa se o site realmente não tem mais a rota.
-            if (result.R.ProcedureMissing)
+            _editFailures++;
+            if (result.R.ProcedureMissing || _editFailures >= 8)
             {
-                _logger.Warn("[YGP] O site não tem mais a rota de edição; desativada nesta sessão. Veja o ygp-diagnostico.txt.");
+                _logger.Warn("[YGP] A rota de edição foi desativada nesta sessão (falhas repetidas). Veja o ygp-diagnostico.txt.");
                 _skipProcs.Add(updateProc);
             }
 
@@ -2530,6 +2410,8 @@ return out;";
             }
             return null;
         }
+
+        private int _editFailures;
 
         /// <summary>
         /// Jogo que o site já tem: lê o estado atual (sync.getGameEditOverlay), troca só horas/datas e grava
@@ -2631,6 +2513,7 @@ return out;";
 
             if (result.R.Ok)
             {
+                _editFailures = 0;
                 _logger.Info($"[YGP] Jogo {gameId} atualizado para {minutes}m via {updateProc}.");
                 return new YgpSyncResult { Success = true, YgpGameId = gameId, TotalPlaytimeMinutes = minutes };
             }
@@ -2638,9 +2521,10 @@ return out;";
             attempts.Add(updateProc + ": " + Trim(result.R.Message ?? result.R.Raw, 220));
             _logger.Warn($"[YGP] {updateProc} recusado (HTTP {result.R.Status}, {result.R.Code}): {Trim(result.R.Raw, 500)}");
 
-            if (result.R.ProcedureMissing)
+            _editFailures++;
+            if (result.R.ProcedureMissing || _editFailures >= 6)
             {
-                _logger.Warn("[YGP] O site não tem mais a rota de edição; desativada nesta sessão. Veja o ygp-diagnostico.txt.");
+                _logger.Warn("[YGP] A rota de edição do site foi desativada nesta sessão (falhas repetidas). Veja o ygp-diagnostico.txt.");
                 _skipProcs.Add(updateProc);
             }
 
@@ -2971,10 +2855,6 @@ return out;";
         public bool Skipped { get; set; }
         /// <summary>O jogo já existe no site mas a atualização das horas não foi aceita.</summary>
         public bool UpdateFailed { get; set; }
-        /// <summary>O status do Playnite foi gravado no site nesta sincronização.</summary>
-        public bool StatusApplied { get; set; }
-        /// <summary>A avaliação em estrelas foi gravada no site nesta sincronização.</summary>
-        public bool RatingApplied { get; set; }
         /// <summary>Minutos que o site tinha antes da atualização (para mostrar quanto subiu).</summary>
         public int? SiteMinutesBefore { get; set; }
         public int TotalPlaytimeMinutes { get; set; }

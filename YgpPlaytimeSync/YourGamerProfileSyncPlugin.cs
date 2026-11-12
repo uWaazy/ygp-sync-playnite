@@ -25,12 +25,22 @@ namespace YgpPlaytimeSync
         private ILogger _logger;
         private readonly string _dataPath;
 
+        /// <summary>Estado do jogo selecionado, lido pelo tema (ver ThemeState).</summary>
+        public ThemeState Theme { get; } = new ThemeState();
+
         // GUID exclusivo do plugin no ecossistema Playnite
         public override Guid Id => Guid.Parse("3f5a006a-a508-4be7-b83d-05e30830abe3");
 
         public YourGamerProfileSyncPlugin(IPlayniteAPI api) : base(api)
         {
             Properties = new GenericPluginProperties { HasSettings = true };
+
+            // Tema: {PluginSettings Plugin=YgpSync, Path=HasData | Synced | Hours | Ignored | Account}
+            AddSettingsSupport(new AddSettingsSupportArgs
+            {
+                SourceName = "YgpSync",
+                SettingsRoot = "Theme"
+            });
 
             _logger = LogManager.GetLogger("YgpPlaytimeSync");
             _logger.Info("[YGP] === PLUGIN CARREGADO - CONSTRUTOR EXECUTADO ===");
@@ -1349,6 +1359,41 @@ namespace YgpPlaytimeSync
 
         #endregion
 
+        #region Integração com temas
+
+        private Game SingleSelectedGame()
+        {
+            try
+            {
+                var list = PlayniteApi.MainView.SelectedGames == null ? null : PlayniteApi.MainView.SelectedGames.ToList();
+                return list != null && list.Count == 1 ? list[0] : null;
+            }
+            catch { return null; }
+        }
+
+        private void RefreshThemeState(Game game)
+        {
+            try
+            {
+                if (game == null || _settings == null) { Theme.Clear(); return; }
+                var minutes = _playtimeStore != null ? _playtimeStore.GetMinutes(game.Id.ToString()) : 0;
+                var ignored = IsIgnoredByName(game) || (_settings.IgnoreSoftware && IsLikelySoftware(game));
+                Theme.Update(_settings.IsConnected, ignored, minutes > 0, minutes > 0 ? FormatMinutes(minutes) : "", _settings.Username);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn("[YGP] Falha ao atualizar o estado do tema: " + ex.Message);
+            }
+        }
+
+        public override void OnGameSelected(OnGameSelectedEventArgs args)
+        {
+            var list = args == null ? null : args.NewValue;
+            RefreshThemeState(list != null && list.Count == 1 ? list[0] : null);
+        }
+
+        #endregion
+
         #region Configurações e UI
 
         public override ISettings GetSettings(bool firstRunSettings)
@@ -1445,6 +1490,11 @@ namespace YgpPlaytimeSync
                 _logger.Info($"[YGP] Registro de tempos enviados criado a partir de {_playtimeStore.Count} jogo(s) já sincronizado(s).");
             }
             _ygpProvider.PlaytimeStore = _playtimeStore;
+            _playtimeStore.Recorded += key =>
+            {
+                var selected = SingleSelectedGame();
+                if (selected != null && selected.Id.ToString() == key) RefreshThemeState(selected);
+            };
 
             // Versão 0.4.1: o registro antigo marcava como "tratados" jogos cujas horas NÃO tinham sido atualizadas no site.
             if (_settings.StoreSchemaVersion < 2)
