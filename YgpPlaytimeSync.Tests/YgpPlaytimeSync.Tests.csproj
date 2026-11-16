@@ -13,7 +13,7 @@
       <HintPath Condition="'$(PlayniteSdkPath)' != ''">$(PlayniteSdkPath)</HintPath>
       <HintPath Condition="'$(PlayniteSdkPath)' == '' And Exists('$(LOCALAPPDATA)\Playnite\Playnite.SDK.dll')">$(LOCALAPPDATA)\Playnite\Playnite.SDK.dll</HintPath>
       <HintPath Condition="'$(PlayniteSdkPath)' == '' And !Exists('$(LOCALAPPDATA)\Playnite\Playnite.SDK.dll')">..\Playnite.SDK.dll</HintPath>
-      <Private>False</Private>
+      <Private>True</Private>
     </Reference>
   </ItemGroup>
 

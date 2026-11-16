@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Moq;
@@ -39,7 +40,7 @@ namespace YgpPlaytimeSync.Tests
         }
 
         [Fact]
-        public void SaveSession_EmptyId_Throws()
+        public async Task SaveSession_EmptyId_Throws()
         {
             // Arrange
             var session = CreateTestSession("game-2", "Test Game 2");

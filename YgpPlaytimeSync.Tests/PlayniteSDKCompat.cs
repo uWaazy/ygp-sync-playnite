@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Playnite.SDK;
 using Playnite.SDK.Plugins;
 
@@ -26,7 +27,6 @@ namespace YgpPlaytimeSync.Tests
         public int MaxRetryCount { get; set; } = 10;
         public bool UploadSessionData { get; set; } = true;
         public bool UploadTotalPlaytime { get; set; } = true;
-        public ConflictStrategy ConflictStrategy { get; set; } = ConflictStrategy.PreferYgp;
         public bool StoreSessionTimestampsLocally { get; set; } = true;
         public bool StoreGameNamesLocally { get; set; } = true;
         public bool DiagnosticLogging { get; set; } = false;
@@ -39,5 +39,14 @@ namespace YgpPlaytimeSync.Tests
         public string LastError { get => _lastError; set => _lastError = value; }
         public string InstallPath { get => _installPath; set => _installPath = value; }
         public string ProviderId { get => _providerId; set => _providerId = value; }
+
+        public void BeginEdit() { }
+        public void CancelEdit() { }
+        public void EndEdit() { }
+        public bool VerifySettings(out List<string> errors)
+        {
+            errors = new List<string>();
+            return true;
+        }
     }
 }

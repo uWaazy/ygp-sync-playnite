@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
+using Moq;
+using Playnite.SDK;
+using Playnite.SDK.Models;
 using Xunit;
 
 namespace YgpPlaytimeSync.Tests
@@ -16,20 +20,16 @@ namespace YgpPlaytimeSync.Tests
         {
             _tempDir = Path.Combine(Path.GetTempPath(), $"ygp_identity_test_{Guid.NewGuid()}");
             Directory.CreateDirectory(_tempDir);
-            _resolver = new GameIdentityResolver(null, _tempDir);
+            _resolver = new GameIdentityResolver(new Mock<ILogger>().Object, _tempDir);
         }
 
         [Fact]
         public async Task Resolve_NoMatch_ReturnsUnmapped()
         {
             // Arrange
-            var game = new PlayniteGameInfo
+            var game = new Game("Unknown Game")
             {
-                Id = "unknown-game",
-                Name = "Unknown Game",
-                Source = "Unknown",
-                SourceId = "",
-                SourceGuid = Guid.NewGuid()
+                Id = Guid.NewGuid()
             };
             
             // Act
@@ -65,15 +65,13 @@ namespace YgpPlaytimeSync.Tests
         public async Task Resolve_WithManualMapping_ReturnsMapped()
         {
             // Arrange
-            await _resolver.CreateManualMappingAsync("playnite-789", "ygp-012", "Mapped");
+            var gameId = Guid.NewGuid();
+            await _resolver.CreateManualMappingAsync(gameId.ToString(), "ygp-012", "Mapped");
             
-            var game = new PlayniteGameInfo
+            var game = new Game("Test Game")
             {
-                Id = "playnite-789",
-                Name = "Test Game",
-                Source = "Steam",
-                SourceId = "999",
-                SourceGuid = Guid.Parse("00000000-0000-0000-0000-000000000001")
+                Id = gameId,
+                SourceId = Guid.Parse("00000000-0000-0000-0000-000000000001")
             };
             
             // Act
